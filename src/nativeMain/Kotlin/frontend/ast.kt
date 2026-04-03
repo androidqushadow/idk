@@ -3,10 +3,11 @@ package frontend
 // We use an enum for the types, though in Kotlin the class
 // type itself usually suffices for checks.
 enum class NodeType {
-    Program, VarDeclaration, FunctionDeclaration,
+    Program, VarDeclaration, FunctionDeclaration,ReturnStmt,
     AssignmentExpr, MemberExpr, CallExpr,
     Property, ObjectLiteral, NumericLiteral,StringLiteral,
-    Identifier, BinaryExpr
+    Identifier, BinaryExpr, IfStmt,
+    UnaryExpr,Block
 }
 
 /**
@@ -28,6 +29,25 @@ data class Program(
 ) : Stmt() {
     override val kind = NodeType.Program
 }
+
+data class UnaryExpr(
+    val operator: String,
+    val argument: Expr,
+    override val kind: NodeType = NodeType.UnaryExpr
+) : Expr()
+
+// Add the If Statement class
+data class IfStatement(
+    val test: Expr,
+    val body: List<Stmt>,
+    val alternate: Stmt? = null,
+    override val kind: NodeType = NodeType.IfStmt
+) : Stmt()
+
+data class BlockStatement(
+    val body: List<Stmt>,
+    override val kind: NodeType = NodeType.Block
+) : Stmt()
 
 data class VarDeclaration(
     val constant: Boolean,
@@ -109,3 +129,8 @@ data class StringLiteral(
 ) : Expr() {
     override val kind = NodeType.StringLiteral
 }
+
+data class ReturnStatement(
+    val value: Expr? = null,
+    override val kind: NodeType = NodeType.ReturnStmt // Add this line!
+) : Stmt()

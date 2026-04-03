@@ -3,136 +3,150 @@ package frontend
 import kotlin.system.exitProcess
 
 enum class TokenType {
-    // Literal Types
-    Number,
-    Identifier,
-
-    // Keywords
-    Let,
-    Const,
-    Fn,
-
-    String,
-    // Grouping & Operators
-    BinaryOperator,
-    Equals,
-    Comma,
-    Dot,
-    Colon,
-    Semicolon,
-    OpenParen,    // (
-    CloseParen,   // )
-    OpenBrace,    // {
-    CloseBrace,   // }
-    OpenBracket,  // [
-    CloseBracket, // ]
-    EOF           // Signified the end of file
+    Number, Identifier, String,
+    Let, Const, Fn, Var, Return, If, Else,
+    BinaryOperator, Equals, Comma, Dot, Colon, Semicolon,
+    And, Or, Not,       // &&, ||, !
+    OpenParen, CloseParen, OpenBrace, CloseBrace, OpenBracket, CloseBracket,
+    EOF
 }
 
-/**
- * Constant lookup for keywords and known identifiers + symbols.
- */
 val KEYWORDS = mapOf(
     "let" to TokenType.Let,
     "const" to TokenType.Const,
-    "fn" to TokenType.Fn
+    "fn" to TokenType.Fn,
+    "var" to TokenType.Var,
+    "return" to TokenType.Return,
+    "if" to TokenType.If,
+    "else" to TokenType.Else
 )
 
-/**
- * Represents a single token from the source-code.
- */
-data class Token(
-    val value: String,
-    val type: TokenType
-)
+data class Token(val value: String, val type: TokenType, val line: Int)
 
-/**
- * Returns whether the character passed in is alphabetic -> [a-zA-Z]
- */
-fun isalpha(src: Char): Boolean {
-    return src.uppercaseChar() != src.lowercaseChar()
-}
-
-/**
- * Returns true if the character is whitespace
- */
-fun isskippable(c: Char): Boolean {
-    return c == ' ' || c == '\n' || c == '\t' || c == '\r'
-}
-
-/**
- * Return whether the character is a valid integer -> [0-9]
- */
-fun isint(c: Char): Boolean {
-    return c in '0'..'9'
-}
+fun isalpha(src: Char): Boolean = src.uppercaseChar() != src.lowercaseChar() || src == '_'
+fun isskippable(c: Char): Boolean = c in " \n\t\r"
+fun isint(c: Char): Boolean = c in '0'..'9'
 
 fun tokenize(sourceCode: String): List<Token> {
     val tokens = mutableListOf<Token>()
-    // Convert string to a MutableList of Chars so we can use removeAt(0) like shift()
     val src = sourceCode.toCharArray().toMutableList()
+    var line = 1
+
+    // Helper to look at the current char without removing it
+    fun at(): Char = if (src.isNotEmpty()) src[0] else '\u0000'
+    // Helper to look at the next char without removing it
+    fun peek(): Char = if (src.size > 1) src[1] else '\u0000'
 
     while (src.isNotEmpty()) {
         val char = src[0]
 
-        // BEGIN PARSING ONE CHARACTER TOKENS
-        when (char) {
-            '(' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.OpenParen))
-            ')' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.CloseParen))
-            '{' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.OpenBrace))
-            '}' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.CloseBrace))
-            '[' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.OpenBracket))
-            ']' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.CloseBracket))
-            // HANDLE BINARY OPERATORS
-            '+', '-', '*', '/', '%' -> {
-                tokens.add(Token(src.removeAt(0).toString(), TokenType.BinaryOperator))
-            }
-            // Handle Conditional & Assignment Tokens
-            '=' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Equals))
-            ';' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Semicolon))
-            ':' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Colon))
-            ',' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Comma))
-            '.' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Dot))
-            else -> {
+        if (char == '\n') {
+            line++
+            src.removeAt(0)
+            continue
+        }
 
-                if (char == '"') {
-                    src.removeAt(0) // Remove opening quote
-                    var str = ""
-                    while (src.isNotEmpty() && src[0] != '"') {
-                        str += src.removeAt(0)
-                    }
-                    src.removeAt(0) // Remove closing quote
-                    tokens.add(Token(str, TokenType.String))
+        when (char) {
+            '(' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.OpenParen, line))
+            ')' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.CloseParen, line))
+            '{' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.OpenBrace, line))
+            '}' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.CloseBrace, line))
+            '[' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.OpenBracket, line))
+            ']' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.CloseBracket, line))
+            ';' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Semicolon, line))
+            ':' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Colon, line))
+            ',' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.Comma, line))
+
+            // Handle Dot carefully: It could be a property access (obj.prop)
+            // or a leading decimal (.5).
+            '.' -> {
+                if (isint(peek())) {
+                    // It's a number like .5! Let the number logic handle it.
+                    // We fall through to the 'else' block by not adding a token here.
+                } else {
+                    tokens.add(Token(src.removeAt(0).toString(), TokenType.Dot, line))
+                    continue
                 }
-                // HANDLE MULTI-CHARACTER TOKENS
-                else if (isint(char)) {
+            }
+
+            '+', '-', '*', '/', '%' -> tokens.add(Token(src.removeAt(0).toString(), TokenType.BinaryOperator, line))
+
+            '=' -> {
+                if (peek() == '=') {
+                    src.removeAt(0); src.removeAt(0)
+                    tokens.add(Token("==", TokenType.BinaryOperator, line))
+                } else {
+                    tokens.add(Token(src.removeAt(0).toString(), TokenType.Equals, line))
+                }
+            }
+            '!' -> {
+                if (peek() == '=') {
+                    src.removeAt(0); src.removeAt(0)
+                    tokens.add(Token("!=", TokenType.BinaryOperator, line))
+                } else {
+                    tokens.add(Token(src.removeAt(0).toString(), TokenType.Not, line))
+                }
+            }
+            '>', '<' -> {
+                val op = src.removeAt(0).toString()
+                if (at() == '=') {
+                    tokens.add(Token(op + src.removeAt(0), TokenType.BinaryOperator, line))
+                } else {
+                    tokens.add(Token(op, TokenType.BinaryOperator, line))
+                }
+            }
+            '&' -> {
+                if (peek() == '&') {
+                    src.removeAt(0); src.removeAt(0)
+                    tokens.add(Token("&&", TokenType.And, line))
+                } else {
+                    println("Error on line $line: Single '&' is not supported. Use '&&'"); exitProcess(1)
+                }
+            }
+            '|' -> {
+                if (peek() == '|') {
+                    src.removeAt(0); src.removeAt(0)
+                    tokens.add(Token("||", TokenType.Or, line))
+                } else {
+                    println("Error on line $line: Single '|' is not supported. Use '||'"); exitProcess(1)
+                }
+            }
+
+            else -> {
+                if (char == '"') {
+                    src.removeAt(0)
+                    var str = ""
+                    while (src.isNotEmpty() && src[0] != '"') str += src.removeAt(0)
+                    if (src.isNotEmpty()) src.removeAt(0)
+                    tokens.add(Token(str, TokenType.String, line))
+                }
+                // Updated Number Logic: Handles 10, 10.5, and .5
+                else if (isint(char) || char == '.') {
                     var num = ""
-                    while (src.isNotEmpty() && isint(src[0])) {
+                    var dotCount = 0
+                    while (src.isNotEmpty() && (isint(src[0]) || src[0] == '.')) {
+                        if (src[0] == '.') {
+                            dotCount++
+                            if (dotCount > 1) break // Stop if we see 1.2.3
+                        }
                         num += src.removeAt(0)
                     }
-                    tokens.add(Token(num, TokenType.Number))
-                } else if (isalpha(char)) {
+                    tokens.add(Token(num, TokenType.Number, line))
+                }
+                else if (isalpha(char)) {
                     var ident = ""
-                    while (src.isNotEmpty() && isalpha(src[0])) {
-                        ident += src.removeAt(0)
-                    }
-                    // CHECK FOR RESERVED KEYWORDS
-                    val reserved = KEYWORDS[ident]
-                    if (reserved != null) {
-                        tokens.add(Token(ident, reserved))
-                    } else {
-                        tokens.add(Token(ident, TokenType.Identifier))
-                    }
+                    while (src.isNotEmpty() && (isalpha(src[0]) || isint(src[0]))) ident += src.removeAt(0)
+                    val type = KEYWORDS[ident] ?: TokenType.Identifier
+                    tokens.add(Token(ident, type, line))
                 } else if (isskippable(char)) {
                     src.removeAt(0)
                 } else {
-                    println("Error: Unrecognized character found in source: ${char.code} ($char)")
+                    println("Error on line $line: Unrecognized character: $char")
                     exitProcess(1)
                 }
             }
         }
     }
-
-    tokens.add(Token("EndOfFile", TokenType.EOF))
+    tokens.add(Token("EndOfFile", TokenType.EOF, line))
     return tokens
 }

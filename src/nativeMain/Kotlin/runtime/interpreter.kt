@@ -12,8 +12,11 @@ fun evaluate(astNode: Stmt, env: Environment): RuntimeVal {
     return when (astNode) {
         // --- LITERALS ---
         is NumericLiteral -> {
-            // Using the MK_NUMBER helper (which I assume is in your values.kt)
             NumberVal(value = astNode.value)
+        }
+
+        is StringLiteral -> {
+            StringVal(value = astNode.value)
         }
 
         is Identifier -> {
@@ -37,6 +40,10 @@ fun evaluate(astNode: Stmt, env: Environment): RuntimeVal {
             evalBinaryExpr(astNode, env)
         }
 
+        is UnaryExpr -> {
+            evalUnaryExpr(astNode, env)
+        }
+
         // --- STATEMENTS ---
         is Program -> {
             evalProgram(astNode, env)
@@ -49,12 +56,28 @@ fun evaluate(astNode: Stmt, env: Environment): RuntimeVal {
         is FunctionDeclaration -> {
             evalFunctionDeclaration(astNode, env)
         }
-        is StringLiteral -> StringVal(value = astNode.value)
 
-        // Handle cases that aren't specifically matched (if any)
+        is ReturnStatement -> {
+            evalReturnStatement(astNode, env)
+        }
+
+        is MemberExpr -> evalMemberExpr(astNode, env)
+
+        // --- NEW LOGIC STATEMENTS ---
+        is IfStatement -> {
+            evalIfStatement(astNode, env)
+        }
+
+        is BlockStatement -> {
+            evalBlockStatement(astNode, env)
+        }
+
+        // --- ERROR HANDLING ---
         else -> {
-            println("This AST Node has not yet been setup for interpretation.\n$astNode")
-            exitProcess(0)
+            println("Runtime Error: This AST Node has not yet been setup for interpretation.")
+            println("Node Kind: ${astNode::class.simpleName}")
+            println("Full Node: $astNode")
+            exitProcess(1)
         }
     }
 }
